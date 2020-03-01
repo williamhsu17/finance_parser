@@ -6,7 +6,7 @@ from IPython.display import display_html
 import requests
 import json
 
-import pymysql
+import sqlite3
 
 #----------------------------------------------------------------------------------------------
 # this part take response text as input and parse for given field in 大盤統計資訊 at given date
@@ -37,6 +37,7 @@ def parse_market_info(data):
     
     # 取出 table:大盤統計資訊值
     for n, field in enumerate(fields):
+        # 確認取得欄位是否同使用欄位
         if field in data[used_key][n][0]:
             data_market_info[f'{field}_成交金額(元)'] = str(data[used_key][n][1])
             data_market_info[f'{field}_成交股數(股)'] = str(data[used_key][n][2])
@@ -65,6 +66,7 @@ def parse_upsdown(data):
     
     # 取出 table:漲跌證券數合計
     for n, field in enumerate(fields):
+        # 確認取得欄位是否同使用欄位
         if field in data[used_key][n][0]:
             data_upsdown[f'{field}_整體市場'] = str(data[used_key][n][1])
             data_upsdown[f'{field}_股票'] = str(data[used_key][n][2])
@@ -91,17 +93,29 @@ def main():
     
     data = pd.merge(data_market_info, data_upsdown, on='date', how='outer')
     
-    db = pymysql.connect("localhost","root","password","stock_table")
-    cursor = db.cursor()
+    DATABASE = "db/ai_finance.db"
     
-    for index, row in data.iterrows():
-        print(index)
-        
-        sql = ''
-        print(sql)
-        cursor.execute(sql)
-        db.commit()
-    return data
+    try:
+        conn = sqlite3.connect(DATABASE)
+    except Exception as e:
+        print(e)
+    
+    data.to_sql(name='data', con=conn)
+    
+    cur = conn.cursor()
+    cur.execute('''CREATE TABLE IF NOT EXISTS data('date', '一般股票_成交金額(元)');''')
+    cur.execute(''' INSERT INTO data ('date', '一般股票_成交金額(元)') 
+        VALUES (?,
+                ?);''',
+       (
+       data.iloc[0][0],
+       data.iloc[0][1]
+       ))
+    conn.commit()
+    conn.close
+    
+    # check if data is saved to database
+    data2 = pd.read_sql('select * from data', conn)
     
 if __name__ == "__main__":
     main()
